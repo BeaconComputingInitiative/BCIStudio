@@ -1,0 +1,70 @@
+# BEACON COMPUTING INITIATIVE
+# BCIStudio consolidated source baseline v0.2.0
+# Developer Seal: CJB-DEV-2026
+# SHA-256: Generated at release time for every file in the archive
+name: BCIStudio Consolidated Source Release
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/release-studio-baseline.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  consolidate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check studio migration contents and Python syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f upstream/bciwhisper/ui_qml/qml/pages/StudioPage.qml
+          test -f upstream/bciwhisper/recording/multitrack.py
+          test -f upstream/bciwhisper/recording/timeline.py
+          test -f upstream/bciwhisper/ui_qml/qml/components/SignalObservatory3D.qml
+          python -m compileall -q upstream/bciwhisper upstream/tests
+      - name: Produce canonical SHA-256 archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          python - <<'PY'
+          import hashlib, pathlib, zipfile
+          root = pathlib.Path('.')
+          paths = sorted(p for p in pathlib.Path('upstream').rglob('*') if p.is_file() and '__pycache__' not in p.parts and p.suffix != '.pyc')
+          assert len(paths) >= 36, f'Expected >=36 imported sources, found {len(paths)}'
+          inventory = ''.join(f'{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.as_posix()}\n' for p in paths)
+          pathlib.Path('dist/SHA256SUMS').write_text(inventory)
+          note = ('BEACON COMPUTING INITIATIVE\nDeveloper Seal: CJB-DEV-2026\n'
+                  'BCIStudio v0.2.0 consolidated source baseline\n'
+                  'Original BCIWhisper commit: a0fd61376e05dcd9be44887ddbf0875bf3fbf65f\n'
+                  'Source-only prerelease; standalone execution not yet certified.\n')
+          pathlib.Path('dist/RELEASE-NOTES.txt').write_text(note)
+          archive = pathlib.Path('dist/BCIStudio-v0.2.0-source.zip')
+          with zipfile.ZipFile(archive, 'w', zipfile.ZIP_DEFLATED) as z:
+              for p in paths: z.write(p, p.as_posix())
+              z.write('dist/SHA256SUMS', 'SHA256SUMS')
+              z.write('dist/RELEASE-NOTES.txt', 'RELEASE-NOTES.txt')
+          digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+          pathlib.Path('dist/BCIStudio-v0.2.0-source.zip.sha256').write_text(f'{digest}  {archive.name}\n')
+          print('Imported files:', len(paths), 'archive SHA256:', digest)
+          PY
+          cd dist
+          sha256sum -c BCIStudio-v0.2.0-source.zip.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BCIStudio-v0.2.0-consolidated-source
+          path: dist/*
+      - name: Create immutable prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git tag -a v0.2.0-source -m 'BCIStudio 0.2.0 source snapshot; CJB-DEV-2026'
+          git push origin v0.2.0-source
+          gh release create v0.2.0-source dist/BCIStudio-v0.2.0-source.zip dist/BCIStudio-v0.2.0-source.zip.sha256 dist/SHA256SUMS dist/RELEASE-NOTES.txt --title 'BCIStudio v0.2.0 — consolidated source baseline' --notes 'Consolidated Podcast Studio 59.0–60.0 sources with SHA-256 manifest. Source-only prerelease; independent runtime integration and hardware verification remain outstanding.' --prerelease
