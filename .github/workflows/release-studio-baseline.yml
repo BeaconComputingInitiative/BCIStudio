@@ -1,12 +1,10 @@
 # BEACON COMPUTING INITIATIVE
 # BCIStudio consolidated source baseline v0.2.0
 # Developer Seal: CJB-DEV-2026
-# SHA-256: Generated at release time for every file in the archive
+# SHA-256: see docs/HYGIENE_SHA256SUMS; archive hashes generated at release time
+# Publish if and only if the explicit manual run passes all source packaging gates.
 name: BCIStudio Consolidated Source Release
 on:
-  push:
-    branches: [main]
-    paths: ['.github/workflows/release-studio-baseline.yml']
   workflow_dispatch:
 permissions:
   contents: write
